@@ -372,6 +372,11 @@ foreach my $collection_node (@{$division_node->findnodes('collections/collection
     my $collection_name = $collection_node->getAttribute('name');
     $collections{$collection_name} = Bio::EnsEMBL::Compara::Utils::MasterDatabase::create_species_set($genome_dbs, "collection-$collection_name", $no_release);
 
+    my $strain_type = $collection_node->getAttribute('strain_type');
+    if (defined $strain_type) {
+        $collections{$collection_name}->add_tag('strain_type', $strain_type);
+    }
+
     my $no_store = $collection_node->getAttribute('no_store') // 0;
     if ($no_store) {
         $unstored_collection_names{$collection_name} = 1;
@@ -558,8 +563,19 @@ $compara_dba->dbc->sql_helper->transaction( -CALLBACK => sub {
                 if ($exist_mlss->name ne $mlss->name) {
                     $compara_dba->dbc->do('UPDATE method_link_species_set SET name = ? WHERE method_link_species_set_id = ?', undef, $mlss->name, $exist_mlss->dbID);
                 }
-                if ($exist_mlss->species_set->name ne $mlss->species_set->name) {
-                    $compara_dba->dbc->do('UPDATE species_set_header SET name = ? WHERE species_set_id = ?', undef, $mlss->species_set->name, $exist_mlss->species_set->dbID);
+
+                # Update MLSS species-set name in database ...
+                my $mlss_ss_name = $mlss->species_set->name;
+                if ($mlss_ss_name ne $exist_mlss->species_set->name) {
+                    # ... unless this would have the effect of removing the 'collection-' prefix from a collection.
+                    unless ("collection-$mlss_ss_name" eq $exist_mlss->species_set->name && exists $collections{$mlss_ss_name}) {
+                        $compara_dba->dbc->do(
+                            'UPDATE species_set_header SET name = ? WHERE species_set_id = ?',
+                            undef,
+                            $mlss_ss_name,
+                            $exist_mlss->species_set->dbID,
+                        );
+                    }
                 }
 
                 # handle re-release : when an object was retired, but is being made current again.

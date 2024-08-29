@@ -165,7 +165,6 @@ sub default_options {
             'orthotree_dir'             => $self->o('dump_dir') . '/orthotree/',
             'homology_dumps_dir'        => $self->o('dump_dir'). '/homology_dumps/',
             'homology_dumps_shared_dir' => $self->o('homology_dumps_shared_basedir') . '/' . $self->o('collection')    . '/' . $self->o('ensembl_release'),
-            'prev_homology_dumps_dir'   => $self->o('homology_dumps_shared_basedir') . '/' . $self->o('collection')    . '/' . $self->o('prev_release'),
 
 
             # Do we want to do OrthologQMAlignment ?
@@ -175,7 +174,6 @@ sub default_options {
             'homology_method_link_types' => ['ENSEMBL_ORTHOLOGUES'],
             # WGA dump directories for OrthologQMAlignment
             'wga_dumps_dir'      => $self->o('homology_dumps_dir'),
-            'prev_wga_dumps_dir' => $self->o('homology_dumps_shared_basedir') . '/' . $self->o('collection')    . '/' . $self->o('prev_release'),
             # set how many orthologs should be flowed at a time
             'orth_batch_size'   => 10,
             # set to 1 when all pairwise and multiple WGA complete
@@ -243,11 +241,9 @@ sub pipeline_wide_parameters {  # these parameter values are visible to all anal
         'output_dir_path'           => $self->o('output_dir_path'),
         'dump_dir'                  => $self->o('dump_dir'),
         'homology_dumps_dir'        => $self->o('homology_dumps_dir'),
-        'prev_homology_dumps_dir'   => $self->o('prev_homology_dumps_dir'),
         'homology_dumps_shared_dir' => $self->o('homology_dumps_shared_dir'),
         'orthotree_dir'             => $self->o('orthotree_dir'),
         'wga_dumps_dir'             => $self->o('wga_dumps_dir'),
-        'prev_wga_dumps_dir'        => $self->o('prev_wga_dumps_dir'),
         'gene_dumps_dir'            => $self->o('gene_dumps_dir'),
         'gene_tree_stats_shared_dir' => $self->o('gene_tree_stats_shared_dir'),
 
@@ -256,7 +252,6 @@ sub pipeline_wide_parameters {  # these parameter values are visible to all anal
         'hashed_mlss_id'     => '#expr(dir_revhash(#mlss_id#))expr#',
         'goc_file'           => '#goc_files_dir#/#hashed_mlss_id#/#mlss_id#.#member_type#.goc.tsv',
         'wga_file'           => '#wga_files_dir#/#hashed_mlss_id#/#mlss_id#.#member_type#.wga.tsv',
-        'previous_wga_file'  => defined $self->o('prev_wga_dumps_dir') ? '#prev_wga_dumps_dir#/#hashed_mlss_id#/#orth_mlss_id#.#member_type#.wga.tsv' : undef,
         'high_conf_file'     => '#homology_dumps_dir#/#hashed_mlss_id#/#mlss_id#.#member_type#.high_conf.tsv',
 
         'skip_epo'      => $self->o('skip_epo'),
@@ -471,6 +466,16 @@ sub core_pipeline_analyses {
                 'method_type'      => $self->o('method_type'),
                 'species_set_name' => $self->o('species_set_name'),
                 'release'          => '#ensembl_release#'
+            },
+            -flow_into  => [ 'find_prev_homology_dumps' ],
+        },
+
+        {   -logic_name => 'find_prev_homology_dumps',
+            -module     => 'Bio::EnsEMBL::Compara::RunnableDB::GeneTrees::SetPrevHomologyDumpParams',
+            -parameters => {
+                'homology_dumps_shared_basedir' => $self->o('homology_dumps_shared_basedir'),
+                'collection'                    => $self->o('collection'),
+                'prev_release'                  => $self->o('prev_release'),
             },
             -flow_into  => [ 'load_genomedb_factory' ],
         },
@@ -958,7 +963,7 @@ sub core_pipeline_analyses {
                             2 => [ 'secondary_structure_decision' ],
                             3 => [ 'pre_sec_struct_tree_4_cores' ],
                           },
-            -rc_name => '1Gb_2c_job',
+            -rc_name => '1Gb_2c_24_hour_job',
         },
 
         {   -logic_name    => 'pre_sec_struct_tree_4_cores', ## pre_sec_struct_tree
@@ -975,7 +980,7 @@ sub core_pipeline_analyses {
                             2 => [ 'secondary_structure_decision' ],
                             3 => [ 'pre_sec_struct_tree_8_cores' ],
                            },
-            -rc_name => '1Gb_4c_job',
+            -rc_name => '1Gb_4c_24_hour_job',
         },
 
         {   -logic_name    => 'pre_sec_struct_tree_8_cores', ## pre_sec_struct_tree
@@ -1020,6 +1025,7 @@ sub core_pipeline_analyses {
                            -1 => [ 'sec_struct_model_tree_2_cores' ],   # This analysis has more cores *and* more memory
                             3 => [ 'sec_struct_model_tree_2_cores' ],
                           },
+            -rc_name => '1Gb_24_hour_job',
         },
 
         {   -logic_name    => 'sec_struct_model_tree_2_cores', ## sec_struct_model_tree
@@ -1051,7 +1057,7 @@ sub core_pipeline_analyses {
                            -1 => [ 'sec_struct_model_tree_8_cores' ],   # This analysis has more cores *and* more memory
                             3 => [ 'sec_struct_model_tree_8_cores' ],
                        },
-            -rc_name => '1Gb_4c_job',
+            -rc_name => '1Gb_4c_24_hour_job',
         },
 
         {   -logic_name    => 'sec_struct_model_tree_8_cores', ## sec_struct_model_tree
@@ -1062,7 +1068,7 @@ sub core_pipeline_analyses {
                             'cmd_max_runtime'       => '86400',
                             'raxml_number_of_cores' => 8,
                            },
-            -rc_name => '2Gb_8c_job',
+            -rc_name => '2Gb_8c_24_hour_job',
         },
 
         {   -logic_name    => 'genomic_alignment',
